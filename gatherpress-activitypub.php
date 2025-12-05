@@ -6,7 +6,7 @@
  * Author:           André Menrath
  * Author URI:       https://graz.social/@linos
  * Version:          1.0.0
- * Requires PHP:     8.1
+ * Requires PHP:     8.2
  * Text Domain:      gatherpress-activitypub
  * Domain Path:      /languages
  * License:          AGPL-3.0-or-later
