@@ -14,10 +14,6 @@ on:
     - 'phpunit.xml.dist'
     - 'composer.*'
 
-env:
-  WP_TESTS_DIR: /wordpress-test-lib
-  WP_CORE_DIR: /wordpress
-
 jobs:
   phpunit:
     name: PHPUnit – PHP ${{ matrix.php-version }}
@@ -26,29 +22,20 @@ jobs:
       mariadb:
         image: mariadb
         env:
-          MYSQL_ROOT_PASSWORD: root
+          MARIADB_DATABASE: wordpress
+          MARIADB_USER: wordpress_user
+          MARIADB_PASSWORD: password
+          MARIADB_ROOT_PASSWORD: password
     strategy:
       matrix:
         php-version: ['8.4']
-        wordpress-version: ['6.8']
-        gatherpress-version: ['develop']
-        activitypub-version: ['trunk']
+        wordpress-version: ['6.9']
     env:
       extensions: mysql, dom, iconv, json, libxml, zip
-      GATHERPRESS_VERSION: ${{ matrix.gatherpress-version }}
-      ACTIVITYPUB_VERSION: ${{ matrix.activitypub-version }}
+      wordpress-plugins: activitypub, gatherpress
     steps:
       - name: Checkout
         uses: https://code.forgejo.org/actions/checkout@v6
-
-      - name: Cache WordPress Setup including the GatherPress and ActivityPub plugin
-        id: cache-wordpress
-        uses: https://code.forgejo.org/actions/cache@v4
-        with:
-          path: |
-            ${{ env.WP_CORE_DIR }}
-            ${{ env.WP_TESTS_DIR }}
-          key: ${{ matrix.wordpress-version }}-${{ matrix.gatherpress-version }}-${{ matrix.activitypub-version }}
 
       - name: Cache Composer
         id: cache-composer
@@ -91,25 +78,36 @@ jobs:
           COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.ACCESS_TOKEN_FOR_GITHUB }}"}}'
           GITHUB_TOKEN: ${{ env.ACCESS_TOKEN_FOR_GITHUB }}
 
-      - name: Install and cache mysqladmin needed to initialize the test database
-        uses: https://github.com/awalsh128/cache-apt-pkgs-action@latest
+      - name: Get cache key for WordPress
+        uses: https://code.forgejo.org/linos/setup-wordpress@v1.2.2
+        id: wordpress-info
         with:
-          packages: mysql-client
-          version: mysql-client-1
+          wordpress-plugins: ${{ env.wordpress-plugins }}
+          only-output-cache-key: true
 
-      - name: Setup WordPress + GatherPress/ActivityPub files and init WordPress test database
+      - name: Cache WordPress setup including PHPUNit and plugins
+        id: cache-wordpress
+        uses: https://code.forgejo.org/actions/cache@v4
+        with:
+          path: ${{ steps.wordpress-info.outputs.wordpress-dir }}
+          key: ${{ steps.wordpress-info.outputs.cache-key }}
+
+      - name: Setup WordPress
         if: steps.cache-wordpress.outputs.cache-hit != 'true'
-        run: bash .forgejo/scripts/install-wp-tests.sh wordpress_test root root mariadb ${{ matrix.wordpress-version }} false false
+        uses: https://code.forgejo.org/linos/setup-wordpress@v1.2.2
+        with:
+          wordpress-plugins: ${{ env.wordpress-plugins }}
+          db-name: wordpress
+          db-user: wordpress_user
+          db-pass: password
+          db-host: mariadb
         env:
           COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.ACCESS_TOKEN_FOR_GITHUB }}"}}'
           GITHUB_TOKEN: ${{ env.ACCESS_TOKEN_FOR_GITHUB }}
-
-      - name: Initialize WordPress test database
-        if: steps.cache-wordpress.outputs.cache-hit == 'true'
-        run: bash .forgejo/scripts/install-wp-tests.sh wordpress_test root root mariadb ${{ matrix.wordpress-version }} false true
 
       - name: PHPUnit
         run: ./vendor/bin/phpunit
         env:
           PHP_VERSION: ${{ matrix.php-versions }}
           WP_ENVIRONMENT_TYPE: production
+          WP_TESTS_DIR: ${{ steps.wordpress-setup.outputs.wordpress-phpunit-dir }}

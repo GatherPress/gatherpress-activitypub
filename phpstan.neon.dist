@@ -23,4 +23,4 @@ parameters:
 		- includes/
 
 	scanDirectories:
-		- /workspace/wordpress/wp-content/plugins/
+		- /var/www/html/wp-content/plugins/
